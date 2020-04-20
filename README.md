@@ -17,4 +17,4 @@ This livecoding system all works because of this: https://github.com/elf-audio/c
 ## WebAudio version
 If you cd to the www directory and type `python -m SimpleHTTPServer 8080`, which runs a local webserver from this directory, then go to http://localhost:8080/ in your browser (then press start), that is the C++ code, transpiled into Javascript, that's making the noise you hear!
 
-How this works: the makefile calls `emcc` to compile a file called `src/em.cpp` which basically just calls the dsp code in the main source, asking it for samples. Then there's a little bit of javascript that interacts with emscripten in `wwww/index.html` to grab that audio and send it out of the speaker.
+How this works: the makefile calls `emcc` to compile a file called `src/em.cpp` which basically just calls the dsp code in the main source, asking it for samples. Then there's a little bit of javascript that interacts with emscripten in `wwww/index.html` to grab that audio and send it out of the speaker. The html file is heavily commented with my findings.

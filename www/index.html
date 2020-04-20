@@ -1,99 +1,95 @@
 <!doctype html>
 <html lang="en-us">
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Emscripten-Generated Code</title>
-
-    <script type="text/javascript" src="em.js"></script>
-  </head>
-  <body>
-
-
-    <script>
-var getSamples = null;
-
-Module.onRuntimeInitialized = function() {
- 
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Livecoding C++ to WebAudio Example</title>
+		<link href="https://fonts.googleapis.com/css?family=Quicksand:500" rel="stylesheet">
+		<link href="style.css" rel="stylesheet">
 
 
+		<script type="text/javascript" src="em.js"></script>
+		<script language="javascript">
+	
+
+	// the function pointer to get the audio from emscripten
+	var getSamples = null;
 
 
-    // Import function from Emscripten generated file
-    getSamples = Module.cwrap(
-    'getSamples', 'number', ['number', 'number', 'number']
-    );
-
-   
-
-
-
-    // Create example data to test float_multiply_array
-    var data = new Float32Array(1000);
-    for(i =0; i < 100; i++) {
-      data[i] = i;//[1, 2, 3, 4, 5]);
-
-}
-
-    
-
-}
-
-
+	// you can only start calling c++ functions once emscripten's "runtime" has started
+	Module.onRuntimeInitialized = function() {
+		
+		// this is the function signature for the getSamples function.
+		// equivalent to 
+		// 	void getSamples(float *samples, int length, int numChans);
+		//
+		// the first item is the function name, 'getSamples'
+		// the next item is 'number' - I think that refers to the return type,
+		// probably shouldnt be a number, but it works anyway
+		// the next item is an array of parameters - the first of those
+		// is a float array, but emscripten treats c arrays/pointers
+		// as exactly that, so you actually pass this method a number
+		// that corresponds to the byte offset in emscriptens
+		// heap memory for this variable. Bit confusing, sorry
+		getSamples = Module.cwrap(
+			'getSamples', 'number', ['number', 'number', 'number']
+		);
+	}
 
 
+	var dataHeap = null;
+	var dataPtr = null;
 
+	var data = new Float32Array();
 
+	// l and r are float arrays for the left and right channels that need to be filled
+	function audioCallback(l, r) {
 
+		// lazy loading of the audio buffer we use to talk to c++/emscripten
+	    if(dataHeap == null) {
+	        data = new Float32Array(l.length * 2);
+	        // Get data byte size, allocate memory on Emscripten heap, and get pointer
+	        var nDataBytes = data.length * data.BYTES_PER_ELEMENT;
+	        dataPtr = Module._malloc(nDataBytes);
 
+	        // Copy data to Emscripten heap (directly accessed from Module.HEAPU8)
+	        dataHeap = new Uint8Array(Module.HEAPU8.buffer, dataPtr, nDataBytes);
+	        dataHeap.set(new Uint8Array(data.buffer));
+	    }
 
-var dataHeap = null;
-var dataPtr = null;
+	    // now we actually call the C++
+	    getSamples(dataHeap.byteOffset, l.length, 2);
 
-var data = new Float32Array();
+	    // turn the emscripten heap array to something we can work with in javascript
+	    // allocating on the audio thread, I know!
+	    var result = new Float32Array(dataHeap.buffer, dataHeap.byteOffset, data.length);
 
-function au(l, r) {
-    if(dataHeap == null) {
-        data = new Float32Array(l.length * 2);
-        // Get data byte size, allocate memory on Emscripten heap, and get pointer
-        var nDataBytes = data.length * data.BYTES_PER_ELEMENT;
-        dataPtr = Module._malloc(nDataBytes);
+	    // deinterleave the result
+	    for(i = 0; i < l.length; i++) {
+	        l[i] = result[i*2];
+	        r[i] = result[i*2+1];
+	    }
 
-        // Copy data to Emscripten heap (directly accessed from Module.HEAPU8)
-        dataHeap = new Uint8Array(Module.HEAPU8.buffer, dataPtr, nDataBytes);
-        dataHeap.set(new Uint8Array(data.buffer));
-
-        //var t0 = performance.now();
-    }
-
-    // for(i = 0; i < l.length; i++) {
-    //     l[i] = r[i] = (Math.random()*2.0 - 1.0) * 0.1;
-    // }
-
-    // Call function and get result
-    getSamples(dataHeap.byteOffset, l.length, 2);
-
-    var result = new Float32Array(dataHeap.buffer, dataHeap.byteOffset, data.length);
-
-    for(i = 0; i < l.length; i++) {
-        l[i] = result[i*2];
-        r[i] = result[i*2+1];
-    }
-
-    //// Free memory - we're not going to do that here. Ever.... AHAAAHAAHAHAH!!
-    //Module._free(dataHeap.byteOffset);
-}
+	    //// Free memory - we're not going to do that here. Ever.... AHAAAHAAHAHAH!!
+	    // this is how you would free memory, if you needed to, but we keep needing
+	    // the audio buffer so lets hang onto it. FOREVER!!!
+	    //Module._free(dataHeap.byteOffset);
+	}
 
 
 
 
+// all this code below sets up the web audio callback, nothing unusual here, 
+// once startAudio() is called, it starts. It can't happen automatically on
+// page load due to security restrictions, has to be initiated by a user 
+// interaction such as a click or touch.
 
-
-
-
+var audioRunning = false;
 var scriptNode = null;
 var source = null;
 var audioCtx = null;
+
 
 
 function setupAudio(fn) {
@@ -117,17 +113,44 @@ function setupAudio(fn) {
     fn(audioProcessingEvent.outputBuffer.getChannelData(0), audioProcessingEvent.outputBuffer.getChannelData(1)); 
   };
 }
-var audioRunning = false;
-function startAudio(fn) {
+
+function startAudio() {
   if(audioRunning) return;
-  setupAudio(fn);
+  setupAudio(audioCallback);
   scriptNode.connect(audioCtx.destination);
   source.start();
   audioRunning = true;
+  document.getElementById("startStop").innerHTML = "stop &#x23F9;";
+  document.getElementById("startStop").href = "javascript: stopAudio();";
+}
+
+function stopAudio() {
+	audioRunning = false;
+	audioCtx.suspend().then(function() { 
+		document.getElementById("startStop").innerHTML = "start &#x25b6;";
+		document.getElementById("startStop").href = "javascript: startAudio();";
+	});
+
 }
 
 
     </script>
-    <a href="javascript: startAudio(au)">start</a>
+    </head>
+	<body>
+
+
+    <h1>Livecoding C++ to WebAudio Example</h1>
+    <div id="content">
+    	<p>This is an example of how to go from livecoding audio in C++ to compiling with emscripten into something that can run on a modern web browser. This repo is mostly here to remind me how I got it all set up and the Makefiles etc, hopefully it can be helpful to others!</p>
+    	<br />
+    	<center><a id="startStop" href="javascript: startAudio()">start &#x25b6;</a></center>
+    	<br /><br />
+    	code: <br /><a href="https://github.com/elf-audio/cpp-to-webaudio-example">https://github.com/elf-audio/cpp-to-webaudio-example</a>
+
+	</div>
+   	<div id="footer">
+   		&copy;2020 <a href="https://www.elf-audio.com/">elf audio</a>
+   	</div>
+    
   </body>
 </html>
