@@ -1,6 +1,8 @@
 # From C++ livecoding audio to WebAudio API
 This is an example of how to go from livecoding audio in C++ to compiling with emscripten into something that can run on a modern web browser. This repo is mostly here to remind me how I got it all set up and the Makefiles etc, hopefully it can be helpful to others!
 
+Here's a demo of what it generates for web: https://elf-audio.github.io/cpp2emscripten-demo/
+
 The example is a sort of gong simulation, just for testing purposes, the purpose isn't to explain that code, it's the process of 
 
 Prerequisites: Mac only, xcode tools and emscripten installed
