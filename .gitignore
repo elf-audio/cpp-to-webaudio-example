@@ -1,0 +1,3 @@
+*.wasm
+audio
+www/em.js
